@@ -1,9 +1,0 @@
-# name       next        needs-bulk  needs-scan  needs-rerun  needs-loose
-hold         enumerate   yes         no          no           no
-enumerate    extract     yes         no          no           no
-extract      classify    no          yes         no           no
-classify     catalog     no          no          yes          no
-catalog      serve-ai    no          no          no           no
-serve-ai     surface     no          no          no           no
-surface      done        no          no          no           yes
-done         -           no          no          no           no

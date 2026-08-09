@@ -29,9 +29,9 @@ C=$here/example/corpus.claims
 R=$here/example/corpus.rules
 
 bank() {
-  echo "== pol-bank — a catalogue of parts becomes a model =="
-  echo "   Q: can 40 lines of table become the ~180 datums a bank needs?"
-  out=$(POL_BANK_SRC=catalogue/corpus "$here/bin/pol-bank" "$here/catalogue/corpus" \
+  echo "== pol-bank — a Markdown catalogue becomes a model =="
+  echo "   Q: can a page that renders in a PR become the datums a bank needs?"
+  out=$("$here/bin/pol-bank" "$here/catalogue/corpus.md" \
     "$here/example/corpus.extras.pol" 2>&1)
   st=$?
   exit_is "bank: generates cleanly" "$st" 0
@@ -42,13 +42,46 @@ bank() {
   has "bank: boundary roster too" "$out" "(boundary platform processing serving crm)"
   n=$(printf '%s\n' "$out" | grep -c '^(pick ')
   if [ "$n" -eq 19 ]; then ok "bank: 19 parts, 19 moves"; else bad "bank: expected 19 pick moves, got $n"; fi
+  # Prose, headings and HTML comments share the file with the data and must not
+  # reach the model — the whole reason a catalogue can document itself in place.
+  lacks "bank: prose around the tables stays out of the model" "$out" "knowledge base"
+  lacks "bank: and so do the notes columns" "$out" "affordably"
+
+  echo "   Q: are columns really matched by NAME rather than position?"
+  scr=$(mktemp)
+  # reverse every Components row, header included: same column names, opposite
+  # order. If order leaked into the output, this would produce a different model.
+  awk '
+    /^## / { inc = ($0 ~ /^## Components/) }
+    inc && /^[ \t]*\|/ && !/^[ \t]*\|[ \t:|-]*\|[ \t]*$/ {
+      n = split($0, c, "|"); line = ""
+      for (i = n - 1; i >= 2; i--) { gsub(/^ +| +$/, "", c[i]); line = line "| " c[i] " " }
+      print line "|"; next
+    }
+    { print }' "$here/catalogue/corpus.md" >"$scr"
+  a=$("$here/bin/pol-bank" "$scr" 2>&1 | grep -v "^;")
+  b=$("$here/bin/pol-bank" "$here/catalogue/corpus.md" 2>&1 | grep -v "^;")
+  if [ "$a" = "$b" ]; then ok "bank: reversing every column changes nothing"
+  else bad "bank: column order leaked into the output"; fi
+  rm -f "$scr"
+
+  echo "   Q: does a malformed catalogue fail loudly, or quietly emit nonsense?"
+  brk=$(mktemp)
+  sed 's/^| name | provides |/| nome | provides |/' "$here/catalogue/corpus.md" >"$brk"
+  err=$("$here/bin/pol-bank" "$brk" 2>&1 >/dev/null); est=$?
+  exit_is "bank: a renamed required column is fatal" "$est" 1
+  has "bank:    and it names the column and the section" "$err" "has no \`name\` column"
+  n=$(printf '%s\n' "$err" | grep -c "^pol-bank:")
+  if [ "$n" -eq 1 ]; then ok "bank:    reported once, not twice (awk runs END after exit)"
+  else bad "bank:    reported $n times"; fi
+  rm -f "$brk"
 }
 
 regen() {
   echo "== The committed model is GENERATED, and stays that way =="
   echo "   Q: has anyone hand-edited output that a catalogue owns?"
   tmp=$(mktemp)
-  POL_BANK_SRC=catalogue/corpus "$here/bin/pol-bank" "$here/catalogue/corpus" \
+  "$here/bin/pol-bank" "$here/catalogue/corpus.md" \
     "$here/example/corpus.extras.pol" >"$tmp" 2>/dev/null
   if diff -q "$tmp" "$M" >/dev/null 2>&1; then
     ok "regen: corpus.pol is byte-identical to what the catalogue produces"
@@ -76,6 +109,42 @@ check() {
   has "check: the brief is silent somewhere" "$out" "gaps: 1"
   has "check: re-runnable classification is not affordable everywhere" "$out" "fails  rerun-is-affordable"
   has "check: the CRM is never coupled at the database" "$out" "holds  crm-stays-loose"
+}
+
+assume() {
+  echo "== pol-assume — which unconfirmed facts does the design stand on? =="
+  echo "   Q: of the catalogue claims nobody has verified, which ones matter?"
+  out=$("$here/bin/pol-assume" "$here/catalogue/corpus.md" "$C" \
+    "$here/example/corpus.extras.pol" 2>&1)
+  st=$?
+  printf '%s\n' "$out" | sed 's/^/     | /'
+  exit_is "assume: runs clean" "$st" 0
+  has "assume: it counts the unconfirmed claims" "$out" "33 unconfirmed claims"
+  has "assume: and how few of them decide anything" "$out" "4 of them decide something"
+  # The headline finding of the whole example rests on two invented cells about
+  # one component. That is the tool working, and an indictment of the catalogue.
+  has "assume: A. the storage claim holds up everything" "$out" "object-store.bulk = yes"
+  has "assume:    without it nothing is realisable at all" "$out" "realisable LOST"
+  has "assume: B. the finding rests on llm-vision keeping nothing" "$out" \
+    "llm-vision.persists = no"
+  has "assume:    flip it and the finding evaporates" "$out" "rerun-is-affordable gained"
+  has "assume: C. one claim is all that protects the CRM" "$out" "direct-db.couples = tight"
+  has "assume: and the rest are named as not worth checking" "$out" "INERT"
+  lacks "assume: presentation fields are never load-bearing" "$out" ".tech ="
+  lacks "assume:    nor are boundaries" "$out" ".within ="
+
+  # THE REGRESSION THAT MATTERS. The first version of this tool answered
+  # "0 of them decide something" because every comparison had errored and an
+  # error read as "no change". A tool that reports safety because it crashed is
+  # worse than no tool, so a broken run must be fatal and loud.
+  echo "   Q: if the comparisons cannot run, does it say so or claim safety?"
+  err=$("$here/bin/pol-assume" "$here/catalogue/corpus.md" "$C" \
+    "$here/example/corpus.extras.pol" --lib /nonexistent/arch.lib.pol 2>&1 >/dev/null || true)
+  bst=$("$here/bin/pol-assume" "$here/catalogue/corpus.md" "$C" \
+    "$here/example/corpus.extras.pol" --lib /nonexistent/arch.lib.pol >/dev/null 2>&1; echo $?)
+  if [ "$bst" != "0" ]; then ok "assume: a broken run exits non-zero (exit $bst)"
+  else bad "assume: a broken run exited 0 — it would read as 'nothing matters'"; fi
+  lacks "assume:    and never claims nothing is load-bearing" "$err" "decide something"
 }
 
 c4() {
@@ -149,7 +218,7 @@ adr() {
   has "adr: B. each record carries its proof" "$out" "blueprint 183 hold object-store"
 }
 
-scenarios="bank regen check c4 interview adr"
+scenarios="bank regen check assume c4 interview adr"
 case "${1:-all}" in
 list) echo "$scenarios" | tr ' ' '\n' ;;
 all) n=0; for s in $scenarios; do [ "$n" = 0 ] || echo; "$s"; n=1; done ;;

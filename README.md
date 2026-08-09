@@ -12,7 +12,8 @@ This repository does the same job mechanically. A **component bank** and the
 brief's requirements become a Pol model; `pol check` enumerates *every*
 architecture the constraints permit; and four tools turn the result into the
 artifacts a team actually needs — a C4 diagram, a list of questions for whoever
-wrote the brief, and decision records that cannot drift from the design.
+wrote the brief, decision records that cannot drift from the design, and a short
+list of the unverified facts the whole thing is standing on.
 
 Nothing here is a new language. **Every semantic lives in Pol**, and these are
 generators and formatters over `pol derive` output. That is deliberate: a second
@@ -24,28 +25,30 @@ language with its own meaning would put a compiler between you and the proof.
   a brief, in prose
         │
         ▼
-  catalogue/*.tbl  ──pol-bank──▶  a .pol model
+  catalogue/*.md   ──pol-bank──▶  a .pol model
         │                              │
         │                         pol check
         │                              │
-        │            ┌─────────────────┼──────────────────┐
-        │            ▼                 ▼                  ▼
-        │      pol-interview       pol-c4             pol-adr
-        │            │                 │                  │
-        │     questions for      C4 diagrams        decision records
-        │      the author         (D2 / SVG)         with proofs
-        │            │
-        └────────────┘   answers sharpen the catalogue, and it runs again
+        │       ┌──────────┬───────────┼──────────┐
+        │       ▼          ▼           ▼          ▼
+        │  pol-assume  pol-interview pol-c4   pol-adr
+        │       │          │           │          │
+        │  the facts   questions   C4 diagrams  decision
+        │  to confirm  for the      (D2/SVG)    records
+        │       │       author                 with proofs
+        │       │          │
+        └───────┴──────────┘  answers sharpen the catalogue, and it runs again
 ```
 
 The loop is the point. `pol-interview` is not a report at the end — it is the
 step that sends you back to the brief with things nobody had noticed.
 
-## The four tools
+## The five tools
 
 | | reads | writes |
 |---|---|---|
-| **`pol-bank`** | a catalogue of parts, as tables | the model's datums — rosters, spans, one move per part |
+| **`pol-bank`** | a catalogue of parts, as a Markdown page | the model's datums — rosters, spans, one move per part |
+| **`pol-assume`** | the catalogue's unconfirmed cells | the few whose truth actually decides the answer |
 | **`pol-interview`** | `pol check` findings | the questions to put back to whoever wrote the brief |
 | **`pol-c4`** | `pol derive` rows | a C4 diagram in D2, at context or container level |
 | **`pol-adr`** | `pol derive` rows and proof trees | decision records, each with what was rejected and why |
@@ -60,15 +63,85 @@ presentation. It is a defect in what a **human** should be asked to type: a bank
 of 150 parts is roughly 4,000 datums, ~750 of them globally unique junction
 names invented by hand.
 
-Forty lines of table become the whole instance:
+A page of tables becomes the whole instance:
 
 ```console
-$ pol-bank catalogue/corpus example/corpus.extras.pol > example/corpus.pol
+$ pol-bank catalogue/corpus.md example/corpus.extras.pol > example/corpus.pol
 ```
+
+**Why Markdown.** A catalogue is a curated knowledge base people argue about,
+not a pipeline feed. It wants to render in a pull request, so a reviewer can
+challenge "is `llm-classifier` really not reproducible?" without running
+anything — and it wants prose. Tables carry the facts; every heading, paragraph
+and `<!-- HTML comment -->` on the page is ignored, and a `notes` column
+documents a row without entering the model.
+
+**Columns are matched by name, not position.** Reorder them freely; add columns
+the tools do not know about. A required column that goes missing is a fatal
+error naming the column and the section, not a quietly wrong model — and
+`run-tests.sh` reverses every column of the components table and asserts the
+output is unchanged.
+
+**Identifier columns must stay single tokens.** Values in `name`, `provides`,
+`tech`, `within` and friends become *entity names* in the model, and Pol names
+cannot contain spaces — so `apache-spark`, never `Apache Spark`. Slugifying and
+keeping display labels outside the model would break the one property `pol-c4`
+sells: that everything on the diagram is derived. Free text belongs in `notes`.
 
 `run-tests.sh` asserts the committed model is **byte-identical** to what the
 catalogue regenerates, so hand-editing generated output fails a test rather than
 being discovered much later.
+
+### `pol-assume` — the answer to "who could possibly verify this catalogue?"
+
+This is the weakest joint in the whole idea, and it deserves stating plainly.
+Everywhere else in the stack a mistake announces itself: a bad guard changes the
+state count, a bad rule fails the cross-check, a bad claim fails to hold. **A
+wrong catalogue cell fails nothing.** It produces a plausible model that proves
+wrong things with exactly the confidence it would have had if the cell were
+right. The catalogue is unfalsifiable input to a falsifying machine.
+
+Asking anyone to verify every cell does not work — a real bank is hundreds of
+claims and nobody will check them. But most of those claims *do not matter*:
+flip them and every verdict is identical. So mark unconfirmed cells with a
+trailing `?`, and let the tool find the few that decide anything:
+
+```console
+$ pol-assume catalogue/corpus.md example/corpus.claims example/corpus.extras.pol
+ASSUMPTIONS THIS DESIGN STANDS ON
+
+  33 unconfirmed claims in the catalogue.
+  4 of them decide something. 29 do not.
+
+LOAD-BEARING — confirm these before anyone builds from this design
+
+  1. object-store.bulk = yes
+     were it `no` instead:
+       realisable LOST
+       no-dead-end LOST
+  3. llm-vision.persists = no
+     were it `yes` instead:
+       rerun-is-affordable gained
+  4. direct-db.couples = tight
+     were it `loose` instead:
+       crm-stays-loose LOST
+```
+
+It flips each assumed cell, rebuilds, and asks `pol compare` whether any
+property moved. **"Verify 33 claims" becomes "confirm these four"** — and the
+four are computed, not guessed. Presentation columns are excluded by
+construction rather than by choice: nothing in the library reads them, so no
+flip of one could move a verdict.
+
+Read it as an indictment of the worked example, too. This repository's headline
+finding rests on two cells about `llm-vision` that were invented in seconds, and
+the tool says so.
+
+> **The bug worth knowing about.** The first version of this reported *"0 of
+> them decide something"* — because every comparison had errored, and an error
+> read as "no change". A tool that reports safety because it crashed is worse
+> than no tool. A broken run is now fatal and loud, and `run-tests.sh` asserts
+> it.
 
 ### `pol-interview` — the step that pays for the exercise
 
@@ -160,7 +233,7 @@ Needs [`pol`](https://github.com/sajonaro/pol) on `PATH`; `d2` only for SVG.
 
 ```sh
 ./install.sh              # -> ~/.local   (bin on PATH, lib on POL_LIB)
-./run-tests.sh            # 43 checks over the four tools
+./run-tests.sh            # 62 checks over the five tools
 ./run-tests.sh list       # the individual tests
 ```
 
@@ -170,10 +243,22 @@ install beyond `pol` itself.
 ## What this does not claim
 
 **The catalogue is the project, and it is the weakest link.** The component
-attributes in `catalogue/corpus` were written by hand as a demonstration. `pol`
-proves what follows from them exhaustively, and will do so just as faithfully if
-they are wrong. The rigour on offer is *internal consistency*, not truth — a
-real bank is a curation problem, and no amount of tooling substitutes for it.
+attributes in `catalogue/corpus.md` were written by hand as a demonstration —
+every one is marked `?`, because every one is unverified. `pol` proves what
+follows from them exhaustively, and will do so just as faithfully if they are
+wrong. The rigour on offer is *internal consistency*, not truth.
+
+`pol-assume` narrows that from fatal to manageable — it turns "verify
+everything" into "confirm these four" — but it cannot tell you whether the four
+are *true*. Only somebody who operates the system can, and no amount of tooling
+substitutes for that.
+
+**A catalogue is per-decision, not an encyclopedia.** The tempting reading of
+`pol-bank` is that you should build a comprehensive bank of 150 components. Do
+not: nobody can author or check that. The version that works is the eight to
+twelve candidates a team would genuinely consider for *one* decision, written by
+the people who will operate them. At that size every row is checkable, which is
+the only size at which any of this is honest.
 
 **Quantities remain out of scope.** Pol has no arithmetic. Ordinal scales and
 precomputed `fixed` arrows carry a long way (a latency budget composes fine over

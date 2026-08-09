@@ -1,0 +1,155 @@
+#!/bin/sh
+# pol-assume — which unconfirmed facts is this design actually standing on?
+#
+# THE PROBLEM THIS EXISTS FOR. Everywhere else in this stack a mistake announces
+# itself: a bad guard changes the state count, a bad rule fails the cross-check,
+# a bad claim fails to hold. A wrong CATALOGUE cell fails nothing. It produces a
+# plausible model that proves wrong things with exactly the confidence it would
+# have had if the cell were right. The catalogue is unfalsifiable input to a
+# falsifying machine, and that is the weakest joint in the whole idea.
+#
+# Asking a human to verify every cell does not work — a bank of any size is
+# hundreds of claims and nobody will check them. But most of those claims do not
+# matter: flip them and every verdict stays exactly the same. Only a few decide
+# anything.
+#
+# So: flip each assumed cell, rebuild, and ask `pol compare` whether any
+# property changed. What comes back is a SHORT list of facts that must be
+# confirmed before anyone builds from the design — and a long list nobody need
+# ever look at. "Verify 42 claims" becomes "confirm these three".
+#
+# A cell is ASSUMED if its value ends in `?`. Bare values are taken as confirmed
+# — somebody stands behind them.
+#
+# Usage:  pol-assume CATALOGUE.md CLAIMS.claims [EXTRAS.pol] [--lib PATH]
+set -eu
+
+lib=
+cat_md=; claims=; extras=
+while [ $# -gt 0 ]; do
+  case $1 in
+  --lib) lib=$2; shift 2 ;;
+  *) if   [ -z "$cat_md" ]; then cat_md=$1
+     elif [ -z "$claims" ];  then claims=$1
+     else extras=$1; fi; shift ;;
+  esac
+done
+[ -n "$cat_md" ] && [ -n "$claims" ] || {
+  echo "usage: pol-assume CATALOGUE.md CLAIMS.claims [EXTRAS.pol] [--lib PATH]" >&2; exit 2; }
+POL=${POL:-pol}
+here=$(cd "$(dirname "$0")" && pwd)
+[ -n "$lib" ] || lib=$here/../lib/arch.lib.pol
+# pol resolves `(load ...)` against the including file dir, $POL_LIB, and the
+# copy beside the binary — an ABSOLUTE path is not among them. Models are built
+# in a temp dir, so a relative path cannot reach the library either: emit the
+# bare name and point POL_LIB at it.
+libdir=$(cd "$(dirname "$lib")" && pwd)
+libname=$(basename "$lib")
+POL_LIB=$libdir
+export POL_LIB
+
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+build() { # catalogue  ->  NAME.pol + NAME.claims in $tmp   (compare reads the sibling)
+  "$here/pol-bank" "$1" ${extras:+"$extras"} --lib "$libname" >"$tmp/$2.pol"
+  cp "$claims" "$tmp/$2.claims"
+}
+build "$cat_md" base
+
+# A tool that answers "nothing is load-bearing" because every comparison errored
+# is worse than no tool. Prove the baseline builds before trusting any verdict.
+if ! "$POL" check "$tmp/base.pol" --claims "$tmp/base.claims" >"$tmp/base.out" 2>&1; then
+  case $(head -1 "$tmp/base.out") in
+  pol:*) echo "pol-assume: the baseline model does not build:" >&2
+         sed 's/^/  /' "$tmp/base.out" >&2; exit 2 ;;
+  esac
+fi
+
+# Every assumed cell in a CONSTRAINT column. Presentation columns are excluded
+# by construction, not by choice: nothing in arch.lib.pol reads them, so no flip
+# of one could ever move a verdict.
+awk '
+  /^## / { inc = ($0 ~ /^## Components/) }
+  inc && /^[ \t]*\|/ && !/^[ \t]*\|[ \t:|-]*\|[ \t]*$/ {
+    n = split($0, c, "|")
+    if (!hdr) { for (i = 2; i < n; i++) { h = c[i]; gsub(/^ +| +$/, "", h); ix[h] = i } hdr = 1; next }
+    nm = c[ix["name"]]; gsub(/^ +| +$/, "", nm)
+    split("bulk scans rerun persists couples", K, " ")
+    for (j = 1; j <= 5; j++) {
+      v = c[ix[K[j]]]; gsub(/^ +| +$/, "", v)
+      if (v ~ /\?$/) { sub(/\?$/, "", v); print nm, K[j], v }
+    }
+  }' "$cat_md" >"$tmp/assumed"
+
+total=$(wc -l <"$tmp/assumed" | tr -d ' ')
+[ "$total" -gt 0 ] || { echo "No assumed cells: every constraint claim in $cat_md is confirmed."; exit 0; }
+
+: >"$tmp/load"; : >"$tmp/inert"
+while read -r name attr val; do
+  case $val in
+  yes) alt=no ;; no) alt=yes ;;
+  tight) alt=loose ;; loose) alt=tight ;; contract) alt=tight ;;
+  *) alt= ;;
+  esac
+  [ -n "$alt" ] || continue
+
+  awk -v N="$name" -v A="$attr" -v V="$alt" '
+    /^## / { inc = ($0 ~ /^## Components/) }
+    inc && /^[ \t]*\|/ && !/^[ \t]*\|[ \t:|-]*\|[ \t]*$/ {
+      n = split($0, c, "|")
+      if (!hdr) { for (i = 2; i < n; i++) { h = c[i]; gsub(/^ +| +$/, "", h); ix[h] = i } hdr = 1; print; next }
+      nm = c[ix["name"]]; gsub(/^ +| +$/, "", nm)
+      if (nm == N) { c[ix[A]] = " " V "? "
+        line = ""; for (i = 2; i < n; i++) line = line "|" c[i]; print line "|"; next }
+    }
+    { print }' "$cat_md" >"$tmp/flip.md"
+  build "$tmp/flip.md" flip
+
+  # `pol compare` reads MODEL.claims beside each model rather than --claims.
+  # Exit 1 means compare HAS a finding (a lost guarantee) — that is a result,
+  # not an error. Only 2 and above is a broken run, and a broken run must stop
+  # the tool rather than read as "this assumption changes nothing".
+  out=$("$POL" compare "$tmp/base.pol" "$tmp/flip.pol" 2>&1) || cst=$?
+  cst=${cst:-0}
+  if [ "$cst" -ge 2 ]; then
+    echo "pol-assume: compare failed on $name.$attr (exit $cst):" >&2
+    printf '%s\n' "$out" | sed 's/^/  /' >&2
+    exit 2
+  fi
+  unset cst
+  chg=$(printf '%s\n' "$out" \
+        | awk '/^properties:|^ / { for (i = 1; i <= NF; i++)
+                 if ($i == "LOST" || $i == "gained") print $(i-1), $i }')
+  if [ -n "$chg" ]; then
+    printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$attr" "$val" "$alt" "$(echo "$chg" | tr '\n' ';')" >>"$tmp/load"
+  else
+    printf '%s.%s\n' "$name" "$attr" >>"$tmp/inert"
+  fi
+done <"$tmp/assumed"
+
+nl=$(wc -l <"$tmp/load" | tr -d ' '); ni=$(wc -l <"$tmp/inert" | tr -d ' ')
+
+echo "ASSUMPTIONS THIS DESIGN STANDS ON"
+echo
+echo "  $total unconfirmed claims in the catalogue."
+printf '  %s of them decide something. %s do not.\n' "$nl" "$ni"
+echo
+if [ "$nl" -gt 0 ]; then
+  echo "LOAD-BEARING — confirm these before anyone builds from this design"
+  echo
+  i=0
+  while IFS="$(printf '\t')" read -r name attr val alt chg; do
+    i=$((i + 1))
+    printf '  %d. %s.%s = %s\n' "$i" "$name" "$attr" "$val"
+    printf '     were it `%s` instead:\n' "$alt"
+    # sed, not a `while read` with a test in it: under `set -e` the loop exits
+    # non-zero on its last blank line and kills the whole report mid-sentence.
+    printf '%s' "$chg" | tr ';' '\n' | sed '/^$/d; s/^/       /' 
+    echo
+  done <"$tmp/load"
+fi
+if [ "$ni" -gt 0 ]; then
+  echo "INERT — every verdict is identical either way; do not spend time on these"
+  echo
+  tr '\n' ' ' <"$tmp/inert" | fold -s -w 68 | sed 's/^/  /'
+  echo
+fi
