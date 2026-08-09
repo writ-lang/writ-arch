@@ -1,0 +1,7 @@
+# from       to         via
+hold         enumerate  batch
+enumerate    extract    stream
+extract      classify   stream
+classify     catalog    batch
+catalog      serve-ai   batch
+catalog      surface    api

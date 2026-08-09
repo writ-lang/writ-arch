@@ -1,0 +1,119 @@
+#!/bin/sh
+# pol-interview — `pol check` findings -> the questions to put back to whoever
+# wrote the brief.
+#
+# This is the step that pays for the whole exercise. An architect reading a
+# vague brief has to GUESS which corners are unspecified; a model of that brief
+# cannot guess, and says so three ways:
+#
+#   a `gap`        the rules are declared silent here — an OPEN QUESTION
+#   `fails P`      a stated requirement does not hold, with a witness — a
+#                  CONTRADICTION between the brief and what it permits
+#   dead ends      configurations from which nothing further is possible
+#
+# None of these is derived by intuition. Each is a finding `pol check` already
+# reports; this only turns them into sentences a non-modeller can answer, and
+# borrows each property's own description from the .claims file so the question
+# reads as the brief wrote it.
+#
+# Usage:  pol-interview MODEL.pol [--claims F.claims]
+set -eu
+model=${1:?usage: pol-interview MODEL.pol [--claims F.claims]}
+shift
+claims=
+while [ $# -gt 0 ]; do
+  case $1 in
+  --claims) claims=$2; shift 2 ;;
+  *) echo "pol-interview: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+POL=${POL:-pol}
+
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+if [ -n "$claims" ]; then
+  "$POL" check "$model" --claims "$claims" >"$tmp/check" 2>&1 || true
+  # NAME<TAB>description, lifted straight from the claims file
+  awk '/^\(property/ { n=$2; if (match($0, /"[^"]*"/))
+        printf "%s\t%s\n", n, substr($0, RSTART+1, RLENGTH-2) }' "$claims" >"$tmp/desc"
+else
+  "$POL" check "$model" >"$tmp/check" 2>&1 || true
+  : >"$tmp/desc"
+fi
+
+awk '
+FILENAME ~ /desc$/ { d[$1] = substr($0, index($0, "\t") + 1); next }
+
+/^gaps: /      { ngap = $2 + 0; sec = "gap"; next }
+/^dead ends: / { ndead = $3 + 0; sec = ""; next }
+/^states: /    { nstate = $2 + 0; sec = ""; next }
+sec == "gap" && /^  / {
+  # "  NAME — "MESSAGE" (min K moves)"
+  line = $0; sub(/^  /, "", line)
+  name = line; sub(/ .*/, "", name)
+  msg = ""; if (match(line, /"[^"]*"/)) msg = substr(line, RSTART+1, RLENGTH-2)
+  reach = ""; if (match(line, /min [0-9]+ moves?/)) { reach = substr(line, RSTART+4, RLENGTH-4) }
+  ng++; gname[ng] = name; gmsg[ng] = msg; greach[ng] = reach
+  next
+}
+/^fails  / { nf++; fname[nf] = $2; sec = "fail"; cur = nf; next }
+/^holds  / { nh++; sec = ""; next }
+sec == "fail" && /^ +witness:/ {
+  w = $0; sub(/^ +witness: +/, "", w); fwit[cur] = w; next
+}
+# the witness is a numbered ROUTE spanning several lines; keep all of it, or
+# the counterexample names one move of a design and reads as nonsense
+sec == "fail" && /^ +[0-9]+\. / {
+  w = $0; sub(/^ +/, "", w); fwit[cur] = fwit[cur] " -> " w; next
+}
+sec == "fail" && /^ +stuck at:/ {
+  s = $0; sub(/^ +stuck at: +/, "", s); fstuck[cur] = s; next
+}
+/can be broken by:/ {
+  b = $0; sub(/^ +can be broken by: +/, "", b); nb++; blaw[nb] = b; next
+}
+
+END {
+  print "THE MODEL ANSWERED " nh " of its questions. It raises " (ng + nf + nb) " for you."
+  print ""
+  printf "  %d situations reachable, %d dead ends.\n", nstate, ndead
+  print ""
+  q = 0
+
+  if (ng) {
+    print "OPEN QUESTIONS — the brief is silent, and the model refuses to guess"
+    print ""
+    for (i = 1; i <= ng; i++) {
+      printf "  %d. %s\n", ++q, gmsg[i]
+      printf "     declared at:   gap `%s`", gname[i]
+      if (greach[i] != "") printf ", reachable in %s", greach[i]
+      print ""
+      print  "     until answered: every design below is provisional — the rules"
+      print  "                     genuinely run out here, they are not merely unstated."
+      print ""
+    }
+  }
+
+  if (nf) {
+    print "CONTRADICTIONS — a stated requirement the brief does not actually get"
+    print ""
+    for (i = 1; i <= nf; i++) {
+      printf "  %d. %s\n", ++q, (fname[i] in d) ? d[fname[i]] : ("`" fname[i] "` does not hold")
+      printf "     property:      %s\n", fname[i]
+      if (fwit[i] != "")   printf "     counterexample: %s\n", fwit[i]
+      if (fstuck[i] != "") printf "     stuck at:      %s\n", fstuck[i]
+      print  "     to decide:     is the counterexample acceptable (relax the"
+      print  "                    requirement), or is it a real defect (add a constraint)?"
+      print ""
+    }
+  }
+
+  if (nb) {
+    print "LAWS YOUR OWN MOVES CAN BREAK"
+    print ""
+    for (i = 1; i <= nb; i++) printf "  %d. broken by: %s\n", ++q, blaw[i]
+    print ""
+  }
+
+  if (q == 0) print "Nothing to ask: no gaps, no failed properties, no breakable laws."
+}
+' "$tmp/desc" "$tmp/check"

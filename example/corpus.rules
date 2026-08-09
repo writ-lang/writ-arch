@@ -1,0 +1,114 @@
+; The four claims of arch.claims, re-asked as derivations (extension §2) —
+; and the blueprint extraction the claims file cannot express at all.
+;
+; This file is CHECKED AGAINST arch.claims by modality-cross-check.sh, not a
+; replacement for it: two implementations of one question, so a disagreement is
+; a bug in one of them rather than a number to adjust.
+;
+; POLARITY — read this before "fixing" anything below.
+;   possible F   the relation is the SATISFYING set      non-empty ⟺ holds
+;   live F       the relation is the COUNTEREXAMPLE set   empty     ⟺ holds
+;   never F      the relation is the COUNTEREXAMPLE set   empty     ⟺ holds
+; `never` is `possible` negated, so its relation collects the situations that
+; SATISFY the forbidden guard. Writing it as the satisfying set of the safe
+; guard would invert the oracle while leaving the script green.
+
+(relation reach 2)
+(rule (reach S S) (situation S))
+(rule (reach S T) (edge E S M) (reach M T))
+
+; `possible`: the finished architectures reachable from the empty board.
+(relation realisable 1)
+(rule (realisable T) (init S) (reach S T) (holds T (is cur.at done)))
+
+; `live`: the counterexample set — reachable situations from which no finished
+; architecture is reachable. Empty, because every admissible prefix extends.
+(relation finished 1)
+(rule (finished T) (situation T) (holds T (is cur.at done)))
+
+(relation can-finish 1)
+(rule (can-finish S) (reach S T) (finished T))
+
+(relation no-dead-end 1)
+(rule (no-dead-end S) (situation S) (not (can-finish S)))
+
+; `never`: the counterexample sets — situations that satisfy what is forbidden.
+(relation rerun-is-affordable 1)
+(rule (rerun-is-affordable S)
+  (situation S)
+  (holds S (and (defined classify.chosen)
+                (not (is extract.chosen.persists yes)))))
+
+(relation crm-stays-loose 1)
+(rule (crm-stays-loose S) (situation S) (holds S (is surface.chosen direct-db)))
+
+; ---------------------------------------------------------------------------
+; READING THE DESIGN OUT. This is what a query cannot do.
+;
+; `(holds S (is K.chosen C))` with S and K bound DERIVES C — interrogator §2 is
+; explicit that this is the only way to ask "in situation S, where does this
+; arrow point", because G is a guard datum whose free variables are the rule's,
+; over a mutable cell. The same question as a `.claims` query answers empty.
+(relation choice (Situation cap comp))
+(rule (choice S K C) (situation S) (holds S (is K.chosen C)))
+
+; stage -> part, for finished architectures only: the machine-readable artifact.
+;   pol derive arch.pol arch.rules "(blueprint 183 K C)"
+(relation blueprint (Situation cap comp))
+(rule (blueprint S K C) (finished S) (choice S K C))
+
+; The half of the answer set that satisfies every STATED requirement and still
+; makes re-classification cost a full re-extract.
+(relation rerun-expensive (Situation))
+(rule (rerun-expensive S)
+  (finished S)
+  (choice S extract C)
+  (is C.persists no))
+
+; ---------------------------------------------------------------------------
+; THE DIAGRAM'S DATA CONTRACT — what `pol-c4` reads, and all it reads.
+;
+; Narrow relations rather than one wide join on purpose: a component missing a
+; presentation attribute should lose that ONE field of its box, not vanish from
+; the diagram entirely. A vacatable arrow that is vacant produces no row.
+
+(relation box-tech     (Situation cap technology))
+(relation box-level    (Situation cap c4))
+(relation box-external (Situation cap flag))
+(relation box-within   (Situation cap boundary))
+
+(rule (box-tech S K T)     (blueprint S K C) (is C.tech T))
+(rule (box-level S K L)    (blueprint S K C) (is C.level L))
+(rule (box-external S K E) (blueprint S K C) (is C.external E))
+(rule (box-within S K B)   (blueprint S K C) (is C.within B))
+
+; RUNTIME data flow, which is not the build ladder — see arch.lib.pol.
+(relation dataflow (cap cap protocol))
+(rule (dataflow A B V) (is F.f-from A) (is F.f-to B) (is F.f-via V))
+
+; C4's context level draws people.
+(relation actor-of (actor cap))
+(rule (actor-of A K) (is A.drives K))
+
+; ---------------------------------------------------------------------------
+; WHY NOT THE OTHERS — what `pol derive --why` cannot tell you.
+;
+; The derivation tree for a chosen part proves only that it WAS chosen. A
+; decision record has to say what was rejected and on which demand, and that is
+; a different question: not "how do I know this fact" but "which candidates did
+; the guard exclude". One relation per demand, so the reason is in the name.
+
+(relation candidate (cap comp))
+(rule (candidate K C) (is P.p-cap K) (is P.p-comp C))
+
+(relation rejected-bulk (cap comp))
+(rule (rejected-bulk K C) (candidate K C) (is K.needs-bulk yes) (not (is C.bulk yes)))
+
+(relation rejected-scan (cap comp))
+(rule (rejected-scan K C) (candidate K C) (is K.needs-scan yes) (not (is C.scans yes)))
+
+(relation rejected-rerun (cap comp))
+(rule (rejected-rerun K C) (candidate K C) (is K.needs-rerun yes) (not (is C.rerunnable yes)))
+
+(relation rejected-coupling (cap comp))
+(rule (rejected-coupling K C) (candidate K C) (is K.needs-loose yes) (is C.couples tight))

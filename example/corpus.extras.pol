@@ -1,0 +1,5 @@
+; What a catalogue cannot say: the brief is silent here, and `gap` is how a
+; model declares that its rules run out rather than guessing past it.
+(transition pdf-kind-unknown
+  (when (is cur.at extract))
+  (do (gap "the brief is silent: are the 50TB of PDFs digital-native or scanned? the extract choice depends on it")))

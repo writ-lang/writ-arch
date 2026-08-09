@@ -1,0 +1,146 @@
+#!/bin/sh
+# pol-c4 — one finished design in a Pol model -> a C4 diagram in D2.
+#
+# NOTHING HERE DECIDES ANYTHING. Every box, every group, every arrow and every
+# label is a row out of `pol derive`; this only reshapes rows into D2. If the
+# diagram is wrong, the MODEL is wrong — which is the one property a hand-drawn
+# architecture diagram can never have, and the reason to generate it at all.
+#
+# It reads exactly the seven relations named below, and no others. A model that
+# defines them can be drawn; a model that cannot is told which one is missing.
+#
+# Usage:  pol-c4 MODEL.pol RULES.rules STATE [--level context|container] [--svg OUT]
+#
+#   STATE names a finished design — any situation `pol check` lists as a dead
+#   end. `pol derive MODEL RULES complete` lists them all.
+set -eu
+
+model=${1:?usage: pol-c4 MODEL.pol RULES.rules STATE [--level L] [--svg OUT]}
+rules=${2:?}
+state=${3:?}
+shift 3
+level=container
+svg=
+while [ $# -gt 0 ]; do
+  case $1 in
+  --level) level=$2; shift 2 ;;
+  --svg) svg=$2; shift 2 ;;
+  *) echo "pol-c4: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+POL=${POL:-pol}
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# One tagged stream out of the seven relations. `pol derive` prints a header
+# line and then indented rows, so rows are taken by field count.
+q() { # tag  query  nfields
+  "$POL" derive "$model" "$rules" "$2" 2>/dev/null \
+    | awk -v t="$1" -v n="$3" 'NF==n && NR>1 { $1=""; sub(/^ /,""); print t, $0 }'
+}
+{
+  q BOX    "(blueprint $state K C)"    3
+  q TECH   "(box-tech $state K T)"     3
+  q EXT    "(box-external $state K E)" 3
+  q WITHIN "(box-within $state K B)"   3
+  "$POL" derive "$model" "$rules" dataflow 2>/dev/null \
+    | awk 'NF==3 && NR>1 { print "FLOW", $1, $2, $3 }'
+  "$POL" derive "$model" "$rules" actor-of 2>/dev/null \
+    | awk 'NF==2 && NR>1 { print "ACTOR", $1, $2 }'
+} >"$tmp/rows"
+
+grep -q '^BOX ' "$tmp/rows" || {
+  echo "pol-c4: no design at state $state — is it a finished one?" >&2
+  echo "        try: $POL derive $model $rules complete" >&2
+  exit 1
+}
+
+awk -v LEVEL="$level" '
+function id(s) { gsub(/[^A-Za-z0-9]/, "_", s); return s }
+function box(k) { return (within[k] == "" ? "loose" : id(within[k])) "." id(k) }
+
+$1 == "BOX"    { stage[++n] = $2; comp[$2] = $3; seen[$2] = 1; next }
+$1 == "TECH"   { tech[$2] = $3; next }
+$1 == "EXT"    { ext[$2] = $3; next }
+$1 == "WITHIN" { within[$2] = $3; next }
+$1 == "FLOW"   { nf++; ff[nf] = $2; ft[nf] = $3; fv[nf] = $4; next }
+$1 == "ACTOR"  { na++; an[na] = $2; ak[na] = $3; next }
+
+END {
+  print "vars: {"
+  print "  d2-config: {"
+  print "    layout-engine: elk"
+  print "    theme-id: 200"
+  print "  }"
+  print "}"
+  print "direction: right"
+  print ""
+
+  for (i = 1; i <= na; i++)
+    if (ak[i] in seen || LEVEL == "context")
+      printf "%s: \"%s\" {\n  shape: person\n}\n", id(an[i]), an[i]
+  if (na) print ""
+
+  # ---------------- CONTEXT: our system as ONE box, externals kept ----------
+  if (LEVEL == "context") {
+    print "system: \"The system\" {"
+    print "  shape: rectangle"
+    print "}"
+    print ""
+    for (i = 1; i <= n; i++) {
+      k = stage[i]
+      if (ext[k] == "yes")
+        printf "%s: \"%s\\n[%s]\" {\n  shape: rectangle\n  style.fill: \"#e6e6e6\"\n  style.stroke-dash: 3\n}\n", \
+          id(k), comp[k], (tech[k] == "" ? "external" : tech[k])
+    }
+    print ""
+    for (i = 1; i <= nf; i++) {
+      a = (ext[ff[i]] == "yes") ? id(ff[i]) : "system"
+      b = (ext[ft[i]] == "yes") ? id(ft[i]) : "system"
+      if (a != b) printf "%s -> %s: \"%s\"\n", a, b, fv[i]
+    }
+    for (i = 1; i <= na; i++)
+      printf "%s -> %s\n", id(an[i]), (ext[ak[i]] == "yes" ? id(ak[i]) : "system")
+    exit
+  }
+
+  # ---------------- CONTAINER: one box per stage, grouped by boundary ------
+  for (i = 1; i <= n; i++) {
+    b = (within[stage[i]] == "" ? "loose" : within[stage[i]])
+    if (!(b in bseen)) { bseen[b] = 1; blist[++nb] = b }
+  }
+  for (j = 1; j <= nb; j++) {
+    b = blist[j]
+    printf "%s: \"%s\" {\n", id(b), b
+    for (i = 1; i <= n; i++) {
+      k = stage[i]
+      if ((within[k] == "" ? "loose" : within[k]) != b) continue
+      lbl = k "\\n" comp[k]
+      if (tech[k] != "") lbl = lbl "\\n[" tech[k] "]"
+      printf "  %s: \"%s\" {\n    shape: rectangle\n", id(k), lbl
+      if (ext[k] == "yes") {
+        print  "    style.fill: \"#e6e6e6\""
+        print  "    style.stroke-dash: 3"
+      }
+      print  "  }"
+    }
+    print "}"
+  }
+  print ""
+
+  for (i = 1; i <= nf; i++)
+    if ((ff[i] in seen) && (ft[i] in seen))
+      printf "%s -> %s: \"%s\"\n", box(ff[i]), box(ft[i]), fv[i]
+  for (i = 1; i <= na; i++)
+    if (ak[i] in seen) printf "%s -> %s\n", id(an[i]), box(ak[i])
+}
+' "$tmp/rows" >"$tmp/out.d2"
+
+if [ -n "$svg" ]; then
+  command -v d2 >/dev/null 2>&1 || { echo "pol-c4: --svg needs d2 on PATH" >&2; exit 2; }
+  d2 "$tmp/out.d2" "$svg" >/dev/null
+  echo "$svg"
+else
+  cat "$tmp/out.d2"
+fi
