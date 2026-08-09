@@ -12,7 +12,7 @@
 # Usage:  pol-c4 MODEL.pol RULES.rules STATE [--level context|container] [--svg OUT]
 #
 #   STATE names a finished design — any situation `pol check` lists as a dead
-#   end. `pol derive MODEL RULES complete` lists them all.
+#   end. `pol derive MODEL RULES finished` lists them all.
 set -eu
 
 model=${1:?usage: pol-c4 MODEL.pol RULES.rules STATE [--level L] [--svg OUT]}
@@ -52,7 +52,7 @@ q() { # tag  query  nfields
 
 grep -q '^BOX ' "$tmp/rows" || {
   echo "pol-c4: no design at state $state — is it a finished one?" >&2
-  echo "        try: $POL derive $model $rules complete" >&2
+  echo "        try: $POL derive $model $rules finished" >&2
   exit 1
 }
 

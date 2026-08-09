@@ -218,7 +218,25 @@ adr() {
   has "adr: B. each record carries its proof" "$out" "blueprint 183 hold object-store"
 }
 
-scenarios="bank regen check assume c4 interview adr"
+demo() {
+  echo "== demo.sh — the whole pipeline, end to end =="
+  echo "   Q: does the documented walkthrough actually run?"
+  out=$("$here/demo.sh" 2>&1); st=$?
+  exit_is "demo: runs to completion" "$st" 0
+  for stage in "0.  THE INPUT" "1.  pol-bank" "2.  pol check" "3.  pol-interview" \
+               "4.  pol-assume" "5.  pol-c4" "6.  pol-adr" "DONE"; do
+    has "demo: stage reached — $stage" "$out" "$stage"
+  done
+  # The demo picked a state by DERIVING it. An earlier version asked for a
+  # relation named `complete`, which had been renamed `finished` — and because
+  # the lookup was silenced with 2>/dev/null it produced an empty state id and
+  # a broken command line rather than an error. Assert a real design was drawn.
+  lacks "demo: no empty state id leaked into the diagram step" "$out" "design # ("
+  has "demo:    a real finished design was chosen" "$out" "of 96 total"
+  lacks "demo: nothing errored mid-run" "$out" "parameter null or not set"
+}
+
+scenarios="bank regen check assume c4 interview adr demo"
 case "${1:-all}" in
 list) echo "$scenarios" | tr ' ' '\n' ;;
 all) n=0; for s in $scenarios; do [ "$n" = 0 ] || echo; "$s"; n=1; done ;;

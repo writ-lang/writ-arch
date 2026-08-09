@@ -232,10 +232,16 @@ rule something out.
 Needs [`pol`](https://github.com/sajonaro/pol) on `PATH`; `d2` only for SVG.
 
 ```sh
+./demo.sh                 # the whole pipeline end to end, on the worked example
 ./install.sh              # -> ~/.local   (bin on PATH, lib on POL_LIB)
-./run-tests.sh            # 62 checks over the five tools
+./run-tests.sh            # 74 checks over the five tools, the demo included
 ./run-tests.sh list       # the individual tests
 ```
+
+`demo.sh` is the fastest way to see what this does: it runs a brief through all
+six stages and prints each one — catalogue, model, enumeration, questions,
+assumptions, diagram, decision records. `run-tests.sh` runs it too, so the
+walkthrough cannot rot while the tools move underneath it.
 
 The tools are POSIX `sh` and `awk` — no runtime, no packages, nothing to
 install beyond `pol` itself.
