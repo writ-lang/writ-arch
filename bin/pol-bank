@@ -48,9 +48,35 @@ function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
 function vac(s)  { sub(/\?$/, "", s); return (s == "" || s == "-") ? "-" : s }
 # awk runs END even after `exit`, so a fatal must also mute END
 function die(m)  { print "pol-bank: " m > "/dev/stderr"; fatal = 1; exit 1 }
-function emit(arrow, n, names, vals,   i, s) {
-  s = "  (" arrow
-  for (i = 1; i <= n; i++) s = s " (" names[i] " " (vals[i] == "-" ? "vacant" : vals[i]) ")"
+# ENTITY-MAJOR emission (kernel §9.2). An instance clause names one entity and
+# then every arrow of it, which is the only shape the parser accepts since the
+# grammar simplification — the arrow-major form this generator used to print,
+# one clause per ARROW listing every entity, is no longer read at all.
+#
+# Arrows are accumulated per entity by `slot` and flushed by `entities`,
+# because awk has no nested arrays and the catalogue is walked column by column.
+# `pad` aligns continuation lines under the first arrow clause, which is what
+# the committed corpus looks like and what makes a 300-line instance readable.
+function slot(ty, name, arrow, val) {
+  acc[ty, name] = acc[ty, name] SUBSEP arrow " " (val == "-" ? "vacant" : val)
+}
+function entities(ty, n, names,   i, j, k, parts, head, pad, out) {
+  for (i = 1; i <= n; i++) {
+    head = "  (" ty " " names[i]
+    pad = sprintf("%" length(head) + 1 "s", "")
+    k = split(acc[ty, names[i]], parts, SUBSEP)
+    out = head
+    for (j = 1; j <= k; j++) {
+      if (parts[j] == "") continue
+      out = out (out == head ? " " : "\n" pad) "(" parts[j] ")"
+    }
+    print out ")"
+  }
+}
+# A type whose entities carry no arrows at all is still a roster line.
+function roster(ty, n, names,   i, s) {
+  s = "  (" ty
+  for (i = 1; i <= n; i++) s = s " " names[i]
   print s ")"
 }
 # value of column NAME in the current row, or "-" if the column is absent
@@ -112,39 +138,51 @@ END {
   print ""
   print "(load \"" LIB "\")"
   print ""
-  print "(instance bank (of arch)"
+  print "(instance bank arch"
 
-  s = "  (cap"; for (i = 1; i <= ns; i++) s = s " " stage[i]; print s ")"
-  emit("next", ns, stage, snext)
-  for (i = 1; i <= ns; i++) blank[i] = "-"
-  emit("chosen", ns, stage, blank)
-  emit("needs-bulk", ns, stage, nb);  emit("needs-scan", ns, stage, nsc)
-  emit("needs-rerun", ns, stage, nr); emit("needs-loose", ns, stage, nl)
+  for (i = 1; i <= ns; i++) {
+    slot("cap", stage[i], "next", snext[i])
+    slot("cap", stage[i], "chosen", "-")
+    slot("cap", stage[i], "needs-bulk", nb[i])
+    slot("cap", stage[i], "needs-scan", nsc[i])
+    slot("cap", stage[i], "needs-rerun", nr[i])
+    slot("cap", stage[i], "needs-loose", nl[i])
+  }
+  entities("cap", ns, stage)
   print ""
 
-  if (nt) { s = "  (technology"; for (i = 1; i <= nt; i++) s = s " " tech[i]; print s ")" }
-  if (nbd){ s = "  (boundary";   for (i = 1; i <= nbd; i++) s = s " " bnd[i]; print s ")" }
+  if (nt) roster("technology", nt, tech)
+  if (nbd) roster("boundary", nbd, bnd)
   print ""
 
-  s = "  (comp"; for (i = 1; i <= nc; i++) s = s " " comp[i]; print s ")"
-  emit("bulk", nc, comp, cb);       emit("scans", nc, comp, cs)
-  emit("rerunnable", nc, comp, cr); emit("persists", nc, comp, cp)
-  emit("couples", nc, comp, cc);    emit("level", nc, comp, cl)
-  emit("tech", nc, comp, ct);       emit("external", nc, comp, ce)
-  emit("within", nc, comp, cw)
+  for (i = 1; i <= nc; i++) {
+    slot("comp", comp[i], "bulk", cb[i])
+    slot("comp", comp[i], "scans", cs[i])
+    slot("comp", comp[i], "rerunnable", cr[i])
+    slot("comp", comp[i], "persists", cp[i])
+    slot("comp", comp[i], "couples", cc[i])
+    slot("comp", comp[i], "level", cl[i])
+    slot("comp", comp[i], "tech", ct[i])
+    slot("comp", comp[i], "external", ce[i])
+    slot("comp", comp[i], "within", cw[i])
+  }
+  entities("comp", nc, comp)
   print ""
 
   if (na) {
-    s = "  (actor"; for (i = 1; i <= na; i++) s = s " " act[i]; print s ")"
-    emit("drives", na, act, adr)
+    for (i = 1; i <= na; i++) slot("actor", act[i], "drives", adr[i])
+    entities("actor", na, act)
     print ""
   }
 
   if (nfl) {
-    s = "  (flow"
-    for (i = 1; i <= nfl; i++) { fid[i] = "fl-" ff[i] "-" ft[i]; s = s " " fid[i] }
-    print s ")"
-    emit("f-from", nfl, fid, ff); emit("f-to", nfl, fid, ft); emit("f-via", nfl, fid, fv)
+    for (i = 1; i <= nfl; i++) {
+      fid[i] = "fl-" ff[i] "-" ft[i]
+      slot("flow", fid[i], "f-from", ff[i])
+      slot("flow", fid[i], "f-to", ft[i])
+      slot("flow", fid[i], "f-via", fv[i])
+    }
+    entities("flow", nfl, fid)
     print ""
   }
 
@@ -156,8 +194,11 @@ END {
       np++; pid[np] = "p-" comp[i] "-" v; pc[np] = comp[i]; pk[np] = v
     }
   }
-  s = "  (prov"; for (i = 1; i <= np; i++) s = s " " pid[i]; print s ")"
-  emit("p-comp", np, pid, pc); emit("p-cap", np, pid, pk)
+  for (i = 1; i <= np; i++) {
+    slot("prov", pid[i], "p-comp", pc[i])
+    slot("prov", pid[i], "p-cap", pk[i])
+  }
+  entities("prov", np, pid)
   print ""
 
   nq = 0
@@ -169,13 +210,15 @@ END {
     }
   }
   if (nq) {
-    s = "  (req"; for (i = 1; i <= nq; i++) s = s " " qid[i]; print s ")"
-    emit("r-comp", nq, qid, qc); emit("r-cap", nq, qid, qk)
+    for (i = 1; i <= nq; i++) {
+      slot("req", qid[i], "r-comp", qc[i])
+      slot("req", qid[i], "r-cap", qk[i])
+    }
+    entities("req", nq, qid)
     print ""
   }
 
-  print "  (cursor cur)"
-  print "  (at (cur " stage[1] ")))"
+  print "  (cursor cur (at " stage[1] ")))"
   print ""
   print "(use arch)"
   print "(initial bank)"

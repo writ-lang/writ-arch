@@ -13,34 +13,30 @@
 ; SATISFY the forbidden guard. Writing it as the satisfying set of the safe
 ; guard would invert the oracle while leaving the script green.
 
-(relation reach 2)
-(rule (reach S S) (situation S))
-(rule (reach S T) (edge E S M) (reach M T))
+(load "ct.rules")
 
-; `possible`: the finished architectures reachable from the empty board.
-(relation realisable 1)
-(rule (realisable T) (init S) (reach S T) (holds T (is cur.at done)))
+; `possible`: the finished architectures — the satisfying set, and the answer to
+; the `realisable` property in corpus.claims. One guard, one name: it was
+; declared twice before, as `realisable` and again as `finished`, differing only
+; in an `(init S) (reach S T)` premise that `(situation T)` already implies
+; (§12.3 enumerates the reachable situations and no others).
+;
+; The surviving name is `finished` because it is not private to this file:
+; demo.sh derives it to pick a design, and pol-c4's usage tells a reader to run
+; `pol derive MODEL RULES finished` to list them. A relation other programs call
+; by name is an interface, so the deduplication keeps THAT side of the pair.
+(satisfies finished (is cur.at done))
 
 ; `live`: the counterexample set — reachable situations from which no finished
 ; architecture is reachable. Empty, because every admissible prefix extends.
-(relation finished 1)
-(rule (finished T) (situation T) (holds T (is cur.at done)))
-
-(relation can-finish 1)
-(rule (can-finish S) (reach S T) (finished T))
-
-(relation no-dead-end 1)
-(rule (no-dead-end S) (situation S) (not (can-finish S)))
+(can-reach can-finish finished)
+(trapped no-dead-end can-finish)
 
 ; `never`: the counterexample sets — situations that satisfy what is forbidden.
-(relation rerun-is-affordable 1)
-(rule (rerun-is-affordable S)
-  (situation S)
-  (holds S (and (defined classify.chosen)
-                (not (is extract.chosen.persists yes)))))
+(satisfies rerun-is-affordable (and (defined classify.chosen)
+                                    (not (is extract.chosen.persists yes))))
 
-(relation crm-stays-loose 1)
-(rule (crm-stays-loose S) (situation S) (holds S (is surface.chosen direct-db)))
+(satisfies crm-stays-loose (is surface.chosen direct-db))
 
 ; ---------------------------------------------------------------------------
 ; READING THE DESIGN OUT. This is what a query cannot do.
