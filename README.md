@@ -287,4 +287,8 @@ them is a judgement the tool deliberately does not make.
 
 Copyright (C) 2026 Alex Kunich. **GNU Affero General Public License, version 3
 or later** ([LICENSE](LICENSE)), matching `pol` itself. A catalogue or model you
-write is your own work, not a derivative of these tools.
+write is your own work, not a derivative of these tools — granted explicitly in
+[`LICENSE.exception`](LICENSE.exception), which also covers the models, diagrams
+and decision records the five tools generate.
+
+Patches are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).

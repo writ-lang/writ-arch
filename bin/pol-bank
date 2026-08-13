@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2026 Alex Kunich
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # pol-bank — a component catalogue (Markdown) -> a Pol model (datums).
 #
 # THIS IS THE TOOL THE LANGUAGE CANNOT BE. A Pol form is rename-and-paste: no

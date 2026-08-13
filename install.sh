@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2026 Alex Kunich
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Install the four tools and the domain library. Plain cp; nothing to build.
 #   ./install.sh [PREFIX]      default ~/.local
 set -eu

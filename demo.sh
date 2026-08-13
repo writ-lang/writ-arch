@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2026 Alex Kunich
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # demo.sh — the whole pipeline, end to end, on the worked example.
 #
 # A brief in prose becomes a catalogue; the catalogue becomes a model; the model

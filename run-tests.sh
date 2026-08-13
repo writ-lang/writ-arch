@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (C) 2026 Alex Kunich
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # End-to-end tests for the four tools: a catalogue becomes a model, the model
 # is checked, and the answers become diagrams, questions and decision records.
 #
