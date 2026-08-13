@@ -1,5 +1,7 @@
 # writ-arch
 
+<img src="docs/images/writ-mark-200.png" alt="writ" width="120" align="left" hspace="16" vspace="4">
+
 **Designing system architectures by exhaustion — a systems-engineering layer
 over [writ](https://github.com/writ-lang/writ).**
 
