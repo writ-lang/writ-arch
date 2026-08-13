@@ -1,7 +1,7 @@
 #!/bin/sh
 # Copyright (C) 2026 Alex Kunich
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# pol-interview — `pol check` findings -> the questions to put back to whoever
+# writ-interview — `writ check` findings -> the questions to put back to whoever
 # wrote the brief.
 #
 # This is the step that pays for the whole exercise. An architect reading a
@@ -13,32 +13,32 @@
 #                  CONTRADICTION between the brief and what it permits
 #   dead ends      configurations from which nothing further is possible
 #
-# None of these is derived by intuition. Each is a finding `pol check` already
+# None of these is derived by intuition. Each is a finding `writ check` already
 # reports; this only turns them into sentences a non-modeller can answer, and
 # borrows each property's own description from the .claims file so the question
 # reads as the brief wrote it.
 #
-# Usage:  pol-interview MODEL.pol [--claims F.claims]
+# Usage:  writ-interview MODEL.writ [--claims F.claims]
 set -eu
-model=${1:?usage: pol-interview MODEL.pol [--claims F.claims]}
+model=${1:?usage: writ-interview MODEL.writ [--claims F.claims]}
 shift
 claims=
 while [ $# -gt 0 ]; do
   case $1 in
   --claims) claims=$2; shift 2 ;;
-  *) echo "pol-interview: unknown option $1" >&2; exit 2 ;;
+  *) echo "writ-interview: unknown option $1" >&2; exit 2 ;;
   esac
 done
-POL=${POL:-pol}
+WRIT=${WRIT:-writ}
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 if [ -n "$claims" ]; then
-  "$POL" check "$model" --claims "$claims" >"$tmp/check" 2>&1 || true
+  "$WRIT" check "$model" --claims "$claims" >"$tmp/check" 2>&1 || true
   # NAME<TAB>description, lifted straight from the claims file
   awk '/^\(property/ { n=$2; if (match($0, /"[^"]*"/))
         printf "%s\t%s\n", n, substr($0, RSTART+1, RLENGTH-2) }' "$claims" >"$tmp/desc"
 else
-  "$POL" check "$model" >"$tmp/check" 2>&1 || true
+  "$WRIT" check "$model" >"$tmp/check" 2>&1 || true
   : >"$tmp/desc"
 fi
 

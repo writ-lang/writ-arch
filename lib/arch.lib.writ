@@ -1,4 +1,4 @@
-; arch.lib.pol — vocabulary for DESIGNING a system architecture out of a bank
+; arch.lib.writ — vocabulary for DESIGNING a system architecture out of a bank
 ; of components, and for drawing the result.
 ;
 ; A DOMAIN LIBRARY: declarations only — a schema and forms, no `use`, no
@@ -16,7 +16,7 @@
 ;   search space.
 ;
 ;   PRESENTATION fields (level, tech, external, within) are read by nothing in
-;   this file. They exist so `pol-c4` can draw a diagram that carries what C4
+;   this file. They exist so `writ-c4` can draw a diagram that carries what C4
 ;   requires. Every one is `fixed`, so none of them adds a single situation —
 ;   a design space is the product of the MUTABLE cells, and these are not.
 ;
@@ -24,7 +24,7 @@
 ; constraint. Add a presentation field freely; add a constraint field only when
 ; you mean to rule something out.
 
-(load "stdlib.pol")
+(load "stdlib.writ")
 
 (schema arch
   (type flag (no yes))
@@ -47,7 +47,7 @@
     (arrow rerunnable (to flag) fixed vacatable)     ; same input, same output
     (arrow persists   (to flag) fixed vacatable)     ; keeps its output
     (arrow couples    (to coupling) fixed vacatable)
-    ; presentation fields — read by pol-c4, by nothing here
+    ; presentation fields — read by writ-c4, by nothing here
     (arrow level      (to c4) fixed vacatable)
     (arrow tech       (to technology) fixed vacatable)
     (arrow external   (to flag) fixed vacatable)     ; outside our boundary

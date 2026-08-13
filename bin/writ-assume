@@ -1,7 +1,7 @@
 #!/bin/sh
 # Copyright (C) 2026 Alex Kunich
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# pol-assume — which unconfirmed facts is this design actually standing on?
+# writ-assume — which unconfirmed facts is this design actually standing on?
 #
 # THE PROBLEM THIS EXISTS FOR. Everywhere else in this stack a mistake announces
 # itself: a bad guard changes the state count, a bad rule fails the cross-check,
@@ -15,7 +15,7 @@
 # matter: flip them and every verdict stays exactly the same. Only a few decide
 # anything.
 #
-# So: flip each assumed cell, rebuild, and ask `pol compare` whether any
+# So: flip each assumed cell, rebuild, and ask `writ compare` whether any
 # property changed. What comes back is a SHORT list of facts that must be
 # confirmed before anyone builds from the design — and a long list nobody need
 # ever look at. "Verify 42 claims" becomes "confirm these three".
@@ -23,7 +23,7 @@
 # A cell is ASSUMED if its value ends in `?`. Bare values are taken as confirmed
 # — somebody stands behind them.
 #
-# Usage:  pol-assume CATALOGUE.md CLAIMS.claims [EXTRAS.pol] [--lib PATH]
+# Usage:  writ-assume CATALOGUE.md CLAIMS.claims [EXTRAS.writ] [--lib PATH]
 set -eu
 
 lib=
@@ -37,37 +37,37 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$cat_md" ] && [ -n "$claims" ] || {
-  echo "usage: pol-assume CATALOGUE.md CLAIMS.claims [EXTRAS.pol] [--lib PATH]" >&2; exit 2; }
-POL=${POL:-pol}
+  echo "usage: writ-assume CATALOGUE.md CLAIMS.claims [EXTRAS.writ] [--lib PATH]" >&2; exit 2; }
+WRIT=${WRIT:-writ}
 here=$(cd "$(dirname "$0")" && pwd)
-[ -n "$lib" ] || lib=$here/../lib/arch.lib.pol
-# pol resolves `(load ...)` against the including file dir, $POL_LIB, and the
+[ -n "$lib" ] || lib=$here/../lib/arch.lib.writ
+# writ resolves `(load ...)` against the including file dir, $WRIT_LIB, and the
 # copy beside the binary — an ABSOLUTE path is not among them. Models are built
 # in a temp dir, so a relative path cannot reach the library either: emit the
-# bare name and point POL_LIB at it.
+# bare name and point WRIT_LIB at it.
 libdir=$(cd "$(dirname "$lib")" && pwd)
 libname=$(basename "$lib")
-POL_LIB=$libdir
-export POL_LIB
+WRIT_LIB=$libdir
+export WRIT_LIB
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-build() { # catalogue  ->  NAME.pol + NAME.claims in $tmp   (compare reads the sibling)
-  "$here/pol-bank" "$1" ${extras:+"$extras"} --lib "$libname" >"$tmp/$2.pol"
+build() { # catalogue  ->  NAME.writ + NAME.claims in $tmp   (compare reads the sibling)
+  "$here/writ-bank" "$1" ${extras:+"$extras"} --lib "$libname" >"$tmp/$2.writ"
   cp "$claims" "$tmp/$2.claims"
 }
 build "$cat_md" base
 
 # A tool that answers "nothing is load-bearing" because every comparison errored
 # is worse than no tool. Prove the baseline builds before trusting any verdict.
-if ! "$POL" check "$tmp/base.pol" --claims "$tmp/base.claims" >"$tmp/base.out" 2>&1; then
+if ! "$WRIT" check "$tmp/base.writ" --claims "$tmp/base.claims" >"$tmp/base.out" 2>&1; then
   case $(head -1 "$tmp/base.out") in
-  pol:*) echo "pol-assume: the baseline model does not build:" >&2
+  writ:*) echo "writ-assume: the baseline model does not build:" >&2
          sed 's/^/  /' "$tmp/base.out" >&2; exit 2 ;;
   esac
 fi
 
 # Every assumed cell in a CONSTRAINT column. Presentation columns are excluded
-# by construction, not by choice: nothing in arch.lib.pol reads them, so no flip
+# by construction, not by choice: nothing in arch.lib.writ reads them, so no flip
 # of one could ever move a verdict.
 awk '
   /^## / { inc = ($0 ~ /^## Components/) }
@@ -106,14 +106,14 @@ while read -r name attr val; do
     { print }' "$cat_md" >"$tmp/flip.md"
   build "$tmp/flip.md" flip
 
-  # `pol compare` reads MODEL.claims beside each model rather than --claims.
+  # `writ compare` reads MODEL.claims beside each model rather than --claims.
   # Exit 1 means compare HAS a finding (a lost guarantee) — that is a result,
   # not an error. Only 2 and above is a broken run, and a broken run must stop
   # the tool rather than read as "this assumption changes nothing".
-  out=$("$POL" compare "$tmp/base.pol" "$tmp/flip.pol" 2>&1) || cst=$?
+  out=$("$WRIT" compare "$tmp/base.writ" "$tmp/flip.writ" 2>&1) || cst=$?
   cst=${cst:-0}
   if [ "$cst" -ge 2 ]; then
-    echo "pol-assume: compare failed on $name.$attr (exit $cst):" >&2
+    echo "writ-assume: compare failed on $name.$attr (exit $cst):" >&2
     printf '%s\n' "$out" | sed 's/^/  /' >&2
     exit 2
   fi

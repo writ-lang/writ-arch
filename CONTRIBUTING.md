@@ -1,4 +1,4 @@
-# Contributing to pol-arch
+# Contributing to writ-arch
 
 Bug reports, questions and patches are all welcome. Start with an issue if the
 change is larger than a fix — it is cheaper to agree on the shape before the

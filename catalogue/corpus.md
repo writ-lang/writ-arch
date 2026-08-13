@@ -4,19 +4,19 @@
 re-runnably. Make what they contain available to AI. Surface it in the CRM that
 already exists.*
 
-This file **is** the knowledge base. `pol-bank` reads the tables below and emits
-a Pol model; nothing else about the architecture is written by hand. Prose like
+This file **is** the knowledge base. `writ-bank` reads the tables below and emits
+a Writ model; nothing else about the architecture is written by hand. Prose like
 this paragraph is ignored by the parser, so a catalogue can explain itself in
 place and still be machine-read.
 
 **Columns are matched by NAME, not position.** Reorder them freely, and add
 columns the tools do not know about — a `notes` column is read by people and
-skipped by `pol-bank`. An empty cell or `-` means *vacant*: no answer, which is
+skipped by `writ-bank`. An empty cell or `-` means *vacant*: no answer, which is
 not the same as `no`.
 
 **Identifier columns must be single tokens** (`kebab-case`). Values in `name`,
 `provides`, `requires`, `tech`, `within`, `stage`, `actor` and the flow columns
-become entity names in the model, and Pol names cannot contain spaces. Free text
+become entity names in the model, and Writ names cannot contain spaces. Free text
 belongs in `notes`, which never enters the model.
 
 <!-- HTML comments work too, for a remark that should not render at all. -->
@@ -44,7 +44,7 @@ The bank. `provides` and `requires` accept comma-separated lists.
 
 Constraint columns (`bulk`, `scans`, `rerun`, `persists`, `couples`) decide what
 may fill what. Presentation columns (`level`, `tech`, `external`, `within`) are
-drawn by `pol-c4` and constrain nothing — they are `fixed` arrows and add no
+drawn by `writ-c4` and constrain nothing — they are `fixed` arrows and add no
 situations at all.
 
 | name | provides | requires | bulk | scans | rerun | persists | couples | level | tech | external | within | notes |

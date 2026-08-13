@@ -5,18 +5,18 @@
 # is checked, and the answers become diagrams, questions and decision records.
 #
 # The oracle for most of these is the model itself — a diagram assertion checks
-# that a box `pol derive` produced reached the D2, never that a particular
+# that a box `writ derive` produced reached the D2, never that a particular
 # architecture is good. The one test with a real oracle is `regen`: the
 # committed model must be byte-identical to what the catalogue regenerates, so
 # a hand-edit of generated output is a failure rather than a surprise later.
 #
-# Usage:  run-tests.sh [NAME | all | list]      `pol` is taken from $POL.
+# Usage:  run-tests.sh [NAME | all | list]      `writ` is taken from $WRIT.
 set -u
 
 here=$(cd "$(dirname "$0")" && pwd)
-POL=${POL:-pol}
-POL_LIB=$here/lib
-export POL_LIB
+WRIT=${WRIT:-writ}
+WRIT_LIB=$here/lib
+export WRIT_LIB
 pass=0
 fail=0
 
@@ -26,15 +26,15 @@ has() { if printf '%s\n' "$2" | grep -qF "$3"; then ok "$1"; else bad "$1 — mi
 lacks() { if printf '%s\n' "$2" | grep -qF "$3"; then bad "$1 — unexpected: $3"; else ok "$1"; fi; }
 exit_is() { if [ "$2" = "$3" ]; then ok "$1 (exit $3)"; else bad "$1 — exit $2, want $3"; fi; }
 
-M=$here/example/corpus.pol
+M=$here/example/corpus.writ
 C=$here/example/corpus.claims
 R=$here/example/corpus.rules
 
 bank() {
-  echo "== pol-bank — a Markdown catalogue becomes a model =="
+  echo "== writ-bank — a Markdown catalogue becomes a model =="
   echo "   Q: can a page that renders in a PR become the datums a bank needs?"
-  out=$("$here/bin/pol-bank" "$here/catalogue/corpus.md" \
-    "$here/example/corpus.extras.pol" 2>&1)
+  out=$("$here/bin/writ-bank" "$here/catalogue/corpus.md" \
+    "$here/example/corpus.extras.writ" 2>&1)
   st=$?
   exit_is "bank: generates cleanly" "$st" 0
   has "bank: one span junction per (part, stage)" "$out" "p-object-store-hold"
@@ -61,8 +61,8 @@ bank() {
       print line "|"; next
     }
     { print }' "$here/catalogue/corpus.md" >"$scr"
-  a=$("$here/bin/pol-bank" "$scr" 2>&1 | grep -v "^;")
-  b=$("$here/bin/pol-bank" "$here/catalogue/corpus.md" 2>&1 | grep -v "^;")
+  a=$("$here/bin/writ-bank" "$scr" 2>&1 | grep -v "^;")
+  b=$("$here/bin/writ-bank" "$here/catalogue/corpus.md" 2>&1 | grep -v "^;")
   if [ "$a" = "$b" ]; then ok "bank: reversing every column changes nothing"
   else bad "bank: column order leaked into the output"; fi
   rm -f "$scr"
@@ -70,10 +70,10 @@ bank() {
   echo "   Q: does a malformed catalogue fail loudly, or quietly emit nonsense?"
   brk=$(mktemp)
   sed 's/^| name | provides |/| nome | provides |/' "$here/catalogue/corpus.md" >"$brk"
-  err=$("$here/bin/pol-bank" "$brk" 2>&1 >/dev/null); est=$?
+  err=$("$here/bin/writ-bank" "$brk" 2>&1 >/dev/null); est=$?
   exit_is "bank: a renamed required column is fatal" "$est" 1
   has "bank:    and it names the column and the section" "$err" "has no \`name\` column"
-  n=$(printf '%s\n' "$err" | grep -c "^pol-bank:")
+  n=$(printf '%s\n' "$err" | grep -c "^writ-bank:")
   if [ "$n" -eq 1 ]; then ok "bank:    reported once, not twice (awk runs END after exit)"
   else bad "bank:    reported $n times"; fi
   rm -f "$brk"
@@ -83,12 +83,12 @@ regen() {
   echo "== The committed model is GENERATED, and stays that way =="
   echo "   Q: has anyone hand-edited output that a catalogue owns?"
   tmp=$(mktemp)
-  "$here/bin/pol-bank" "$here/catalogue/corpus.md" \
-    "$here/example/corpus.extras.pol" >"$tmp" 2>/dev/null
+  "$here/bin/writ-bank" "$here/catalogue/corpus.md" \
+    "$here/example/corpus.extras.writ" >"$tmp" 2>/dev/null
   if diff -q "$tmp" "$M" >/dev/null 2>&1; then
-    ok "regen: corpus.pol is byte-identical to what the catalogue produces"
+    ok "regen: corpus.writ is byte-identical to what the catalogue produces"
   else
-    bad "regen: corpus.pol has drifted from catalogue/corpus — re-run pol-bank"
+    bad "regen: corpus.writ has drifted from catalogue/corpus — re-run writ-bank"
     diff "$M" "$tmp" | head -10 | sed 's/^/     | /'
   fi
   rm -f "$tmp"
@@ -97,7 +97,7 @@ regen() {
 check() {
   echo "== The generated model, checked =="
   echo "   Q: which architectures satisfy the brief, and what does it not say?"
-  out=$("$POL" check "$M" --claims "$C" 2>&1)
+  out=$("$WRIT" check "$M" --claims "$C" 2>&1)
   st=$?
   printf '%s\n' "$out" | grep -v 'reached by' | sed 's/^/     | /'
   exit_is "check: reports findings" "$st" 1
@@ -114,10 +114,10 @@ check() {
 }
 
 assume() {
-  echo "== pol-assume — which unconfirmed facts does the design stand on? =="
+  echo "== writ-assume — which unconfirmed facts does the design stand on? =="
   echo "   Q: of the catalogue claims nobody has verified, which ones matter?"
-  out=$("$here/bin/pol-assume" "$here/catalogue/corpus.md" "$C" \
-    "$here/example/corpus.extras.pol" 2>&1)
+  out=$("$here/bin/writ-assume" "$here/catalogue/corpus.md" "$C" \
+    "$here/example/corpus.extras.writ" 2>&1)
   st=$?
   printf '%s\n' "$out" | sed 's/^/     | /'
   exit_is "assume: runs clean" "$st" 0
@@ -140,19 +140,19 @@ assume() {
   # error read as "no change". A tool that reports safety because it crashed is
   # worse than no tool, so a broken run must be fatal and loud.
   echo "   Q: if the comparisons cannot run, does it say so or claim safety?"
-  err=$("$here/bin/pol-assume" "$here/catalogue/corpus.md" "$C" \
-    "$here/example/corpus.extras.pol" --lib /nonexistent/arch.lib.pol 2>&1 >/dev/null || true)
-  bst=$("$here/bin/pol-assume" "$here/catalogue/corpus.md" "$C" \
-    "$here/example/corpus.extras.pol" --lib /nonexistent/arch.lib.pol >/dev/null 2>&1; echo $?)
+  err=$("$here/bin/writ-assume" "$here/catalogue/corpus.md" "$C" \
+    "$here/example/corpus.extras.writ" --lib /nonexistent/arch.lib.writ 2>&1 >/dev/null || true)
+  bst=$("$here/bin/writ-assume" "$here/catalogue/corpus.md" "$C" \
+    "$here/example/corpus.extras.writ" --lib /nonexistent/arch.lib.writ >/dev/null 2>&1; echo $?)
   if [ "$bst" != "0" ]; then ok "assume: a broken run exits non-zero (exit $bst)"
   else bad "assume: a broken run exited 0 — it would read as 'nothing matters'"; fi
   lacks "assume:    and never claims nothing is load-bearing" "$err" "decide something"
 }
 
 c4() {
-  echo "== pol-c4 — a design becomes a C4 diagram =="
+  echo "== writ-c4 — a design becomes a C4 diagram =="
   echo "   Q: does every box and arrow come out of the model?"
-  out=$("$here/bin/pol-c4" "$M" "$R" 183 --level container 2>&1)
+  out=$("$here/bin/writ-c4" "$M" "$R" 183 --level container 2>&1)
   st=$?
   exit_is "c4: container level emits" "$st" 0
   has "c4: parts are grouped by their boundary" "$out" "platform: \"platform\" {"
@@ -168,18 +168,18 @@ c4() {
   lacks "c4:    the ladder's serve-ai -> surface edge is absent" "$out" \
     "serving.serve_ai -> crm.surface"
 
-  ctx=$("$here/bin/pol-c4" "$M" "$R" 183 --level context 2>&1)
+  ctx=$("$here/bin/writ-c4" "$M" "$R" 183 --level context 2>&1)
   has "c4: context level collapses us to one system" "$ctx" "system: \"The system\""
   has "c4:    and keeps the external system separate" "$ctx" "system -> surface: \"api\""
 
-  bad_out=$("$here/bin/pol-c4" "$M" "$R" 0 --level container 2>&1)
+  bad_out=$("$here/bin/writ-c4" "$M" "$R" 0 --level container 2>&1)
   bst=$?
   exit_is "c4: an unfinished state is refused, not half-drawn" "$bst" 1
   has "c4:    and it says how to find a finished one" "$bad_out" "derive"
 
   if command -v d2 >/dev/null 2>&1; then
-    if "$here/bin/pol-c4" "$M" "$R" 183 --level container --svg "$here/example/out/container-183.svg" >/dev/null 2>&1 &&
-       "$here/bin/pol-c4" "$M" "$R" 183 --level context --svg "$here/example/out/context-183.svg" >/dev/null 2>&1; then
+    if "$here/bin/writ-c4" "$M" "$R" 183 --level container --svg "$here/example/out/container-183.svg" >/dev/null 2>&1 &&
+       "$here/bin/writ-c4" "$M" "$R" 183 --level context --svg "$here/example/out/context-183.svg" >/dev/null 2>&1; then
       ok "c4: d2 renders both levels to SVG"
     else bad "c4: d2 failed to render"; fi
   else
@@ -188,9 +188,9 @@ c4() {
 }
 
 interview() {
-  echo "== pol-interview — findings become questions for the author of the brief =="
+  echo "== writ-interview — findings become questions for the author of the brief =="
   echo "   Q: what did the brief fail to say, and where does it contradict itself?"
-  out=$("$here/bin/pol-interview" "$M" --claims "$C" 2>&1)
+  out=$("$here/bin/writ-interview" "$M" --claims "$C" 2>&1)
   printf '%s\n' "$out" | sed 's/^/     | /'
   has "interview: it counts what it answered and what it asks" "$out" "It raises 2 for you"
   has "interview: A. the open question is the gap's own words" "$out" "digital-native or scanned"
@@ -205,9 +205,9 @@ interview() {
 }
 
 adr() {
-  echo "== pol-adr — the design becomes decision records that cannot drift =="
+  echo "== writ-adr — the design becomes decision records that cannot drift =="
   echo "   Q: why this part, and what was rejected on which requirement?"
-  out=$("$here/bin/pol-adr" "$M" "$R" 183 2>&1)
+  out=$("$here/bin/writ-adr" "$M" "$R" 183 2>&1)
   st=$?
   exit_is "adr: emits" "$st" 0
   has "adr: the decision carries technology and boundary" "$out" \
@@ -225,8 +225,8 @@ demo() {
   echo "   Q: does the documented walkthrough actually run?"
   out=$("$here/demo.sh" 2>&1); st=$?
   exit_is "demo: runs to completion" "$st" 0
-  for stage in "0.  THE INPUT" "1.  pol-bank" "2.  pol check" "3.  pol-interview" \
-               "4.  pol-assume" "5.  pol-c4" "6.  pol-adr" "DONE"; do
+  for stage in "0.  THE INPUT" "1.  writ-bank" "2.  writ check" "3.  writ-interview" \
+               "4.  writ-assume" "5.  writ-c4" "6.  writ-adr" "DONE"; do
     has "demo: stage reached — $stage" "$out" "$stage"
   done
   # The demo picked a state by DERIVING it. An earlier version asked for a

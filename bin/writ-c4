@@ -1,23 +1,23 @@
 #!/bin/sh
 # Copyright (C) 2026 Alex Kunich
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# pol-c4 — one finished design in a Pol model -> a C4 diagram in D2.
+# writ-c4 — one finished design in a Writ model -> a C4 diagram in D2.
 #
 # NOTHING HERE DECIDES ANYTHING. Every box, every group, every arrow and every
-# label is a row out of `pol derive`; this only reshapes rows into D2. If the
+# label is a row out of `writ derive`; this only reshapes rows into D2. If the
 # diagram is wrong, the MODEL is wrong — which is the one property a hand-drawn
 # architecture diagram can never have, and the reason to generate it at all.
 #
 # It reads exactly the seven relations named below, and no others. A model that
 # defines them can be drawn; a model that cannot is told which one is missing.
 #
-# Usage:  pol-c4 MODEL.pol RULES.rules STATE [--level context|container] [--svg OUT]
+# Usage:  writ-c4 MODEL.writ RULES.rules STATE [--level context|container] [--svg OUT]
 #
-#   STATE names a finished design — any situation `pol check` lists as a dead
-#   end. `pol derive MODEL RULES finished` lists them all.
+#   STATE names a finished design — any situation `writ check` lists as a dead
+#   end. `writ derive MODEL RULES finished` lists them all.
 set -eu
 
-model=${1:?usage: pol-c4 MODEL.pol RULES.rules STATE [--level L] [--svg OUT]}
+model=${1:?usage: writ-c4 MODEL.writ RULES.rules STATE [--level L] [--svg OUT]}
 rules=${2:?}
 state=${3:?}
 shift 3
@@ -27,18 +27,18 @@ while [ $# -gt 0 ]; do
   case $1 in
   --level) level=$2; shift 2 ;;
   --svg) svg=$2; shift 2 ;;
-  *) echo "pol-c4: unknown option $1" >&2; exit 2 ;;
+  *) echo "writ-c4: unknown option $1" >&2; exit 2 ;;
   esac
 done
-POL=${POL:-pol}
+WRIT=${WRIT:-writ}
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# One tagged stream out of the seven relations. `pol derive` prints a header
+# One tagged stream out of the seven relations. `writ derive` prints a header
 # line and then indented rows, so rows are taken by field count.
 q() { # tag  query  nfields
-  "$POL" derive "$model" "$rules" "$2" 2>/dev/null \
+  "$WRIT" derive "$model" "$rules" "$2" 2>/dev/null \
     | awk -v t="$1" -v n="$3" 'NF==n && NR>1 { $1=""; sub(/^ /,""); print t, $0 }'
 }
 {
@@ -46,15 +46,15 @@ q() { # tag  query  nfields
   q TECH   "(box-tech $state K T)"     3
   q EXT    "(box-external $state K E)" 3
   q WITHIN "(box-within $state K B)"   3
-  "$POL" derive "$model" "$rules" dataflow 2>/dev/null \
+  "$WRIT" derive "$model" "$rules" dataflow 2>/dev/null \
     | awk 'NF==3 && NR>1 { print "FLOW", $1, $2, $3 }'
-  "$POL" derive "$model" "$rules" actor-of 2>/dev/null \
+  "$WRIT" derive "$model" "$rules" actor-of 2>/dev/null \
     | awk 'NF==2 && NR>1 { print "ACTOR", $1, $2 }'
 } >"$tmp/rows"
 
 grep -q '^BOX ' "$tmp/rows" || {
-  echo "pol-c4: no design at state $state — is it a finished one?" >&2
-  echo "        try: $POL derive $model $rules finished" >&2
+  echo "writ-c4: no design at state $state — is it a finished one?" >&2
+  echo "        try: $WRIT derive $model $rules finished" >&2
   exit 1
 }
 
@@ -140,7 +140,7 @@ END {
 ' "$tmp/rows" >"$tmp/out.d2"
 
 if [ -n "$svg" ]; then
-  command -v d2 >/dev/null 2>&1 || { echo "pol-c4: --svg needs d2 on PATH" >&2; exit 2; }
+  command -v d2 >/dev/null 2>&1 || { echo "writ-c4: --svg needs d2 on PATH" >&2; exit 2; }
   d2 "$tmp/out.d2" "$svg" >/dev/null
   echo "$svg"
 else

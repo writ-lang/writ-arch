@@ -22,8 +22,8 @@
 ; (§12.3 enumerates the reachable situations and no others).
 ;
 ; The surviving name is `finished` because it is not private to this file:
-; demo.sh derives it to pick a design, and pol-c4's usage tells a reader to run
-; `pol derive MODEL RULES finished` to list them. A relation other programs call
+; demo.sh derives it to pick a design, and writ-c4's usage tells a reader to run
+; `writ derive MODEL RULES finished` to list them. A relation other programs call
 ; by name is an interface, so the deduplication keeps THAT side of the pair.
 (satisfies finished (is cur.at done))
 
@@ -49,7 +49,7 @@
 (rule (choice S K C) (situation S) (holds S (is K.chosen C)))
 
 ; stage -> part, for finished architectures only: the machine-readable artifact.
-;   pol derive arch.pol arch.rules "(blueprint 183 K C)"
+;   writ derive arch.writ arch.rules "(blueprint 183 K C)"
 (relation blueprint (Situation cap comp))
 (rule (blueprint S K C) (finished S) (choice S K C))
 
@@ -62,7 +62,7 @@
   (is C.persists no))
 
 ; ---------------------------------------------------------------------------
-; THE DIAGRAM'S DATA CONTRACT — what `pol-c4` reads, and all it reads.
+; THE DIAGRAM'S DATA CONTRACT — what `writ-c4` reads, and all it reads.
 ;
 ; Narrow relations rather than one wide join on purpose: a component missing a
 ; presentation attribute should lose that ONE field of its box, not vanish from
@@ -78,7 +78,7 @@
 (rule (box-external S K E) (blueprint S K C) (is C.external E))
 (rule (box-within S K B)   (blueprint S K C) (is C.within B))
 
-; RUNTIME data flow, which is not the build ladder — see arch.lib.pol.
+; RUNTIME data flow, which is not the build ladder — see arch.lib.writ.
 (relation dataflow (cap cap protocol))
 (rule (dataflow A B V) (is F.f-from A) (is F.f-to B) (is F.f-via V))
 
@@ -87,7 +87,7 @@
 (rule (actor-of A K) (is A.drives K))
 
 ; ---------------------------------------------------------------------------
-; WHY NOT THE OTHERS — what `pol derive --why` cannot tell you.
+; WHY NOT THE OTHERS — what `writ derive --why` cannot tell you.
 ;
 ; The derivation tree for a chosen part proves only that it WAS chosen. A
 ; decision record has to say what was rejected and on which demand, and that is
